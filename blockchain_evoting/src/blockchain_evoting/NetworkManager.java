@@ -16,8 +16,7 @@ public abstract class NetworkManager implements Runnable{
 	/*
 	 * Send a message to socket
 	 */
-	public void sendMsg(Socket socket, MessageStruct msg) 
-			throws IOException {
+	public void sendMsg(Socket socket, MessageStruct msg) throws IOException {
 		ObjectOutputStream out;
 		
 		out = new ObjectOutputStream(socket.getOutputStream());

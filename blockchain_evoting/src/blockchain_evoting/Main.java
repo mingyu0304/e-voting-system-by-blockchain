@@ -8,16 +8,13 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
-import javax.crypto.SealedObject;
+import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
@@ -153,7 +150,7 @@ public class Main {
             }
         }
 
-        // COUNT VOTES
+        // COUNT VOTES*
         else if(ch == 3)
         {
             String userHomePath = System.getProperty("user.home");
@@ -172,32 +169,38 @@ public class Main {
                     System.out.println("-------------------------");
                     System.out.println("Vote count: ");
                     ObjectInputStream in=new ObjectInputStream(new FileInputStream(fileName));
-
+                    
+                    ArrayList<Block> chkBlock = new ArrayList<Block>();
                     ArrayList<SealedObject> arr=(ArrayList<SealedObject>) in.readObject();
                     HashMap<String,Integer> voteMap = new HashMap<>();
-
+                    chkBlock.add((Block) decrypt(arr.get(0)));
+                    
                     for(int i=1; i<arr.size(); i++)
                     {
                         Block blk = (Block) decrypt(arr.get(i));
+                        chkBlock.add(blk);
                         String key = blk.getVoteObj().getVoteParty();
 
                         voteMap.put(key,0);
                     }
 
-                    for(int i=1;i<arr.size();i++) {
-                        Block blk = (Block) decrypt(arr.get(i));
-                        String key = blk.getVoteObj().getVoteParty();
+                    if (isChainValid(chkBlock)) {
+						for (int i = 1; i < arr.size(); i++) {
+							Block blk = (Block) decrypt(arr.get(i)); // 블록해독
+							String key = blk.getVoteObj().getVoteParty(); // 투표를 받느 후보자의 key
 
-                        voteMap.put(key, voteMap.get(key)+1);
-                    }
-                    in.close();
+							voteMap.put(key, voteMap.get(key) + 1); // 누적된 투표수 + 1
+						}
+						in.close(); // 입력스트림 종료
 
-                    for(Map.Entry<String, Integer> entry : voteMap.entrySet()) {
-                        System.out.println(entry.getKey() + " : " + entry.getValue());
-                    }
+						// 최종 투표 결과 출력
+						for (Map.Entry<String, Integer> entry : voteMap.entrySet()) {
+							System.out.println(entry.getKey() + " : " + entry.getValue());
+						}
 
-                    System.out.println("-------------------------\n");
-                }
+						System.out.println("-------------------------\n");
+					}
+				}
 
             } catch (IOException e1) {
                 e1.printStackTrace();
@@ -221,21 +224,54 @@ public class Main {
         exit(0);
     }
 
-    public static Object decrypt(SealedObject sealedObject) throws IOException, NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException
-    {
-        SecretKeySpec sks = new SecretKeySpec("MyDifficultPassw".getBytes(), "AES");
+    public static Object decrypt(SealedObject sealedObject)
+			throws IOException, NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException {
+		SecretKeySpec sks = new SecretKeySpec("MyDifficultPassw".getBytes(), "AES");
 
-        // Create cipher
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, sks);
+		// Cipher 생성
+		Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+		cipher.init(Cipher.DECRYPT_MODE, sks);
 
-        try {
-//    		System.out.println(sealedObject.getObject(cipher));
-            return sealedObject.getObject(cipher);
-        } catch (ClassNotFoundException | IllegalBlockSizeException | BadPaddingException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            return null;
-        }
-    }
+		try {
+			return sealedObject.getObject(cipher);
+		} catch (ClassNotFoundException | IllegalBlockSizeException | BadPaddingException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+ // 블록체인 최종 검증
+ 	public static boolean isChainValid(ArrayList<Block> blockchain) {
+ 		Block currentBlock;
+ 		Block previousBlock;
+
+ 		String hashTarget = new String(new char[ClientManager.difficulty]).replace('\0', '0'); // 채굴조건 확인을 위한 문자열
+
+ 		for (int i = 1; i < blockchain.size(); i++) {
+ 			currentBlock = blockchain.get(i);
+ 			previousBlock = blockchain.get(i - 1);
+ 			// 블록 해시값 체크
+ 			if (!currentBlock.getBlockHash().equals(currentBlock.calculateHash())) {
+ 				System.out.println("#Current Hashes not equal");
+ 				return false;
+ 			}
+ 			// 이전 블록과의 해시값 체크
+ 			if (!previousBlock.getBlockHash().equals(currentBlock.getPreviousHash())) {
+ 				System.out.println("#Previous Hashes not equal");
+ 				return false;
+ 			}
+ 			// 해시값이 채굴 조건을 만족하는지 확인
+ 			if (!currentBlock.getBlockHash().substring(0, ClientManager.difficulty).equals(hashTarget)) {
+ 				System.out.println("#This block hasn't been mined");
+ 				return false;
+ 			}
+
+ 			// 투표내역 확인 : 디지털 서명 확인
+ 			if (!currentBlock.getVoteObj().verifySignature()) {
+ 				System.out.println("#Signature on Transaction is Invalid");
+ 				return false;
+ 			}
+ 		}
+ 		System.out.println("Blockchain is valid");
+ 		return true;
+ 	}
 }

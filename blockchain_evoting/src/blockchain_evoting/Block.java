@@ -1,88 +1,77 @@
 package blockchain_evoting;
 
-import java.io.Serializable;
+import java.io.Serializable; // Serialize 필요성 : *** 이후 작성 ***
+import java.security.*;
+import java.util.ArrayList;
+import java.util.Date;
 
-public class Block implements Serializable
-{
-	//inner class
-	public class Vote implements Serializable
-	{
-		private String voterId;
-		private String voterName;
-		private String voteParty;
-
-		public Vote(String voterId, String voterName, String voteParty)
-		{
-			this.voterName=voterName;
-			this.voterId=voterId;
-			this.voteParty=voteParty;
-		}
-
-		public String getVoterId() {
-			return voterId;
-		}
-
-		public void setVoterId(String voterId) {
-			this.voterId = voterId;
-		}
-
-		public String getVoterName() {
-			return voterName;
-		}
-
-		public void setVoterName(String voterName) {
-			this.voterName = voterName;
-		}
-
-		public String getVoteParty() {
-			return voteParty;
-		}
-
-		public void setVoteParty(String voteParty) {
-			this.voteParty = voteParty;
-		}
-	}
-
+public class Block implements Serializable {
 	private Vote voteObj;
-	
-	private int previousHash;
-	private int blockHash;
 
-	public Block(int previousHash, String voterId, String voterName, String voteParty)
-	{
-		this.previousHash=previousHash;
-		voteObj=new Vote(voterId, voterName, voteParty);
+	private String previousHash; // 이전 블록의 해시값
+	private String blockHash; // 현재 블록의 해시값
+	private String merkleRoot;
+	private long timeStamp; // 1/1/1970때부터의 밀리세컨드
+	private int nonce; // 작업 증명시 필요한 변수
 
-		Object[] contents={voteObj.hashCode(), previousHash};
-		this.blockHash=contents.hashCode();
+	// 생성자
+	public Block(String previousHash) {
+		this.previousHash = previousHash;
+		this.timeStamp = new Date().getTime();
+
+		this.blockHash = calculateHash();
 	}
 
+	// Getter, Setter
 	public Vote getVoteObj() {
 		return voteObj;
 	}
 
-	public void setVoteObj(Vote voteObj) {
-		this.voteObj = voteObj;
-	}
-
-	public int getPreviousHash() {
+	public String getPreviousHash() {
 		return previousHash;
 	}
 
-	public void setPreviousHash(int previousHash) {
-		this.previousHash = previousHash;
-	}
-
-	public int getBlockHash() {
+	public String getBlockHash() {
 		return blockHash;
 	}
 
-	public void setBlockHash(int blockHash) {
-		this.blockHash = blockHash;
+	// 블록의 인스턴스 변수를 기반으로 hash 값을 반환Calculate new hash based on blocks contents
+	public String calculateHash() {
+		String calculatedHash = StringUtil
+				.applySha256(previousHash + Long.toString(timeStamp) + Integer.toString(nonce) + merkleRoot);
+		return calculatedHash;
 	}
-	
+
+	// nonce 를 늘려가면서 조건에 맞는 hash 값을 찾아 블록 채굴 -> 시간 소요
+	public void mineBlock(int difficulty) {
+		merkleRoot = StringUtil.getMerkleRoot(voteObj);
+
+		String target = StringUtil.getDifficultyString(difficulty); // 난이도에 따른 target 저장
+		while (!blockHash.substring(0, difficulty).equals(target)) {
+			nonce++;
+			blockHash = calculateHash();
+		}
+	}
+
+	// 투표 내역을 블록에 추가
+	public boolean addVote(Vote vote) {
+		if (vote == null)
+			return false;
+		if (!previousHash.equals("0")) {
+			if (!vote.processVote()) {
+				return false;
+			}
+		}
+		voteObj = vote;
+		return true;
+	}
+
+	// 디버깅 용
 	@Override
 	public String toString() {
-		return "Voter Id:" + this.voteObj.voterId + "\nVoter Name: " + this.voteObj.voterName + "\nVoted for party: " + this.voteObj.voteParty;
+		if (this.voteObj == null)
+			return null;
+		return "Voter Id:" + this.voteObj.getVoterPhoneNumber() + "\nVoter Name: " + "\nVoted for party: "
+				+ this.voteObj.getVoteParty();
 	}
 }
